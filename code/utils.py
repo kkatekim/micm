@@ -83,3 +83,8 @@ def final_table(file, gene_type):
     df.to_csv(out_file, index=False)
 
     return df
+
+def get_chr_num(chr):
+    return chr[3:]
+
+print(get_chr_num("chr12"))
