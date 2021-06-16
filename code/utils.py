@@ -11,7 +11,7 @@ import hail as hl
 def get_geneIDs(file, gene_type, column_name, sheet=None):
     '''Extracts genes names as series, writes them into csv, and returns it'''
     
-    out_file = Path("../data/extracted_{}.csv".format(gene_type))
+    out_file = Path("../data/{}_gene_IDs.csv".format(gene_type))
 
     if sheet is None:
         df = pd.read_excel(file)
@@ -44,22 +44,22 @@ def merge_genes(file, gene_file, gene_type, column_name, sheet=None):
 def find_subset(df, column_name, factor, condition):
     '''finds the rows in the column with the specified value'''
 
-    if condition == "equal":
+    if condition == "=":
         return df[df[column_name] == factor]
     
-    elif condition == "not equal":
+    elif condition == "!=":
         return df[df[column_name] != factor]
     
-    elif condition == "less":
+    elif condition == "<":
         return df[df[column_name] < factor]
 
-    elif condition == "greater":
+    elif condition == ">":
         return df[df[column_name] > factor]
 
-    elif condition == "less equal":
+    elif condition == "<=":
         return df[df[column_name] <= factor]
 
-    elif condition == "greater equal":
+    elif condition == ">=":
         return df[df[column_name] >= factor]
 
 
@@ -78,19 +78,19 @@ def final_table(file, gene_type):
     # TODO: rewrite this using groupby and size()
 
     for val in genes.tolist():
-        df1 = find_subset(df, "gene", val, "equal")
+        df1 = find_subset(df, "gene", val, "=")
         
-        syn = find_subset(df1, "consequence", "synonymous", "equal")
-        mis = find_subset(df1, "consequence", "missense", "equal")
-        ptv = find_subset(df1, "consequence", "lof", "equal")
+        syn = find_subset(df1, "consequence", "synonymous", "=")
+        mis = find_subset(df1, "consequence", "missense", "=")
+        ptv = find_subset(df1, "consequence", "lof", "=")
 
-        syn_cases = find_subset(syn, "case_control", "Case", "equal")
-        mis_cases = find_subset(mis, "case_control", "Case", "equal")
-        ptv_cases = find_subset(ptv, "case_control", "Case", "equal")
+        syn_cases = find_subset(syn, "case_control", "Case", "=")
+        mis_cases = find_subset(mis, "case_control", "Case", "=")
+        ptv_cases = find_subset(ptv, "case_control", "Case", "=")
 
-        syn_control = find_subset(syn, "case_control", "Control", "equal")
-        mis_control = find_subset(mis, "case_control", "Control", "equal")
-        ptv_control = find_subset(ptv, "case_control", "Control", "equal")
+        syn_control = find_subset(syn, "case_control", "Control", "=")
+        mis_control = find_subset(mis, "case_control", "Control", "=")
+        ptv_control = find_subset(ptv, "case_control", "Control", "=")
 
         sample_syn = syn.drop_duplicates(subset="sample")
         sample_mis = mis.drop_duplicates(subset="sample")
@@ -141,12 +141,6 @@ def fishers_test(df, variant):
         case_noncarrier = int(3864 - df[case].iloc[i].astype(np.int32))
         control_noncarrier = int(7839 - df[control].iloc[i].astype(np.int32))
 
-        tbl = [
-            [case_carrier, case_noncarrier],
-            [control_carrier, control_noncarrier]
-        ]
-
-        #oddsratio, p = stats.fisher_exact(tbl)
         result = hl.eval(hl.fisher_exact_test(case_carrier, case_noncarrier, control_carrier, control_noncarrier))
         p_list.append(hl.eval(result["p_value"]))
         oddsratio_list.append(hl.eval(result["odds_ratio"]))
@@ -220,34 +214,19 @@ def plot_qq(filename, name):
         plt.savefig("../data/datasets/figures/{}_{}_QQ.png".format(name, variant))
         plt.show()
 
-def find_signficiant_genes_one_variant(df, alpha, variant):
+
+def find_significant_genes(df, alpha, variant, name):
     '''find genes less than p value based on mutation variant'''
     
     # multiple test correction, divide alpha by # of genes
-    new_p = alpha/df.shape[0]
+    adjusted_p = alpha/df.shape[0]
+
     col = "pval_" + variant
-    df.sort_values(col_p, ignore_index=True)
+    df.sort_values(col, ignore_index=True, inplace=True)
 
-    gene_list = []
+    significant_genes = find_subset(df, col, adjusted_p, "<=")
+    significant_genes = find_subset(significant_genes, "pval_synonymous", adjusted_p, ">")
 
-    i = 0
+    significant_genes.to_csv("../data/datasets/{}_{}_significant_genes.csv".format(name, variant), index=False)
     
-    while df.iloc[i][col] <= new_p:
-
-        if df.iloc[i]["pval_synonymous"] > new_p:
-            gene_list.append(df.iloc[i]["gene"])
-        
-        i += 1
-    
-    return gene_list
-
-
-def find_all_signficant_genes(df, significant_genes_list):
-
-    adjusted_p = 0.05/df.shape[0]
-
-    variants = ["missense", "PTVs"]
-
-    df_missense = pd.DataFrame()
-    df_PTV = pd.DataFrame()
-
+    return significant_genes
