@@ -1,61 +1,37 @@
 import pandas as pd
+import utils 
 
-import utils
+def remove_significant_syn(df):
 
-def find_af_nfe_equal_0(df, out_file):
-    df = utils.find_subset(df, "AF_NFE", 0, "equal")
-    df.to_csv(out_file, index=False)
+    adjusted_p = 0.05/df.shape[0]
+    return utils.find_subset(df, "pval_synonymous", adjusted_p, ">=")
 
-def get_cases_controls(filename, gene_type):
-    df = utils.final_table(filename, gene_type)
 
-def run_fishers(filename, out_file):
-    utils.all_stats(filename, out_file)
+def plot_qq_for_all_variants(df, title, remove_syn=False):
 
-def get_af_nfe_equals_0():
-    df = pd.read_csv("../data/datasets/variants_in_domain.csv")
-    find_af_nfe_equal_0(df, "../data/datasets/variants_with_af_nfe_0.csv")
-    get_cases_controls("../data/datasets/variants_with_af_nfe_0.csv", "variants_with_0_af_nfe")
-    run_fishers("../data/variants_with_0_af_nfe_case_control_variants_per_gene.csv", "../data/datasets/variants_with_0_af_nfe_fishers.csv")
+    df1 = df
+    variants = ["synonymous", "missense","PTVs", "missense_MPC>=2"]
 
-def get_mpc_greaterequal_2():
-    df = pd.read_csv("../data/datasets/variants_in_domain.csv")
-    df = utils.find_subset(df, "MPC", 2, "greater equal")
-    df.to_csv("../data/datasets/variants_mpc_greaterequal2.csv", index=False)
-    df = utils.final_table("../data/datasets/variants_mpc_greaterequal2.csv","variants_mpc")
-    utils.all_stats("../data/variants_mpc_case_control_variants_per_gene.csv", "../data/datasets/variants_mpc_greaterequal_2_fishers.csv")
-
-def merge_missense_mpc(mpc_file, all_file, out_file):
-    df = pd.read_csv(mpc_file)
-
-    cols = ["gene", "cases_missense", "control_missense", "sample_missense", 
-            "pval_missense", "OR_missense", "lowci_missense", "highci_missense"]
-    df = df[cols]
-    df.rename(columns={"cases_missense": "cases_missense_MPC>=2", "control_missense": "control_missense_MPC>=2",
-                            "sample_missense": "sample_missense_MPC>=2", "pval_missense": "pval_missense_MPC>=2",
-                            "OR_missense": "OR_missense_MPC>=2", "lowci_missense": "lowci_missense_MPC>=2",
-                            "highci_missense": "highci_missense_MPC>=2"}, inplace=True)
-
-    df1 = pd.read_csv(all_file)
-    df = pd.merge(df1, df, how="outer", on="gene")
-    df.to_csv(out_file, index=False)
-
-def get_mpc_greaterequal_2_for_af_nfe_0():
-    af_nfe = pd.read_csv("../data/datasets/variants_with_af_nfe_0.csv")
-    mpc = pd.read_csv("../data/datasets/variants_mpc_greaterequal2.csv")
-
-    # merge the af_nfe df with the mpc since i want to find the intersection of these
-    af_nfe_mpc = pd.merge(af_nfe, mpc, how="inner")
-    af_nfe_mpc.to_csv("../data/datasets/variants_af_nfe_mpc.csv", index=False)
-    df = utils.final_table("../data/datasets/variants_af_nfe_mpc.csv","variants_af_nfe_mpc")
-    utils.all_stats("../data/variants_af_nfe_mpc_case_control_variants_per_gene.csv", "../data/datasets/variants_af_nfe_mpc_fishers.csv")
+    if remove_syn:
+        df1 = remove_significant_syn(df1)
+    
+    for variant in variants:
+        #print(df.shape[0], df["pval_{}".format(variant)].dropna().shape[0], no_syn["pval_{}".format(variant)].dropna().shape[0])
+        utils.plot_qq(df1, title, variant)
 
 
 if __name__ == "__main__":
-    merge_missense_mpc("../data/datasets/variants_mpc_greaterequal_2_fishers.csv",
-                            "../data/datasets/protein_variants_fishers.csv",
-                            "../data/datasets/variants_missense_mpc_greaterequal_2_fishers.csv")
 
-    merge_missense_mpc("../data/datasets/variants_af_nfe_mpc_fishers.csv",
-                             "../data/datasets/variants_with_0_af_nfe_fishers.csv",
-                             "../data/datasets/variants_af_nfe_mpc_combined_fishers.csv")
+    df = pd.read_csv("../data/proteinDomain/variants_missense_mpc_greaterequal_2_fishers.csv")
+    no_syn = remove_significant_syn(df)
+    print(df.shape[0], no_syn.shape[0])
+    print(df.dropna(subset=["pval_missense_MPC>=2"]).shape[0], no_syn.dropna(subset=["pval_missense_MPC>=2"]).shape[0])
+    plot_qq_for_all_variants(df, "Variants")
+    plot_qq_for_all_variants(df, "Variants (significant synonymous genes removed)", True)
+
+    df1 = pd.read_csv("../data/proteinDomain/variants_af_nfe_mpc_combined_fishers.csv")
+    no_syn1 = remove_significant_syn(df1)
+    print(df1.shape[0], no_syn1.shape[0])
+    print(df1.dropna(subset=["pval_missense_MPC>=2"]).shape[0], no_syn1.dropna(subset=["pval_missense_MPC>=2"]).shape[0])
+    plot_qq_for_all_variants(df, "Variants AF_NFE=0")
+    plot_qq_for_all_variants(df, "Variants AF_NFE=0 (significant synonymous genes removed)", True)       
